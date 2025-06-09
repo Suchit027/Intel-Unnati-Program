@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Speech to Text</title>
+</head>
+<body>
+    <h2>Upload an Audio File</h2>
+    <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <button type="submit">Transcribe</button>
+    </form>
+
+    {% if transcript %}
+        <h3>Transcript:</h3>
+        <p>{{ transcript }}</p>
+    {% endif %}
+</body>
+</html>
