@@ -1,0 +1,21 @@
+<!-- templates/tts_app/index.html -->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Text to Speech</title>
+</head>
+<body>
+    <h1>Enter text to convert to speech:</h1>
+    <form action="{% url 'speak' %}" method="post">
+        {% csrf_token %}
+        <textarea name="text" rows="4" cols="50" required></textarea><br>
+        <button type="submit">Generate Speech</button>
+    </form>
+    {% if audio_url %}
+        <h2>Output:</h2>
+        <audio controls>
+            <source src="{{ audio_url }}" type="audio/wav">
+        </audio>
+    {% endif %}
+</body>
+</html>
