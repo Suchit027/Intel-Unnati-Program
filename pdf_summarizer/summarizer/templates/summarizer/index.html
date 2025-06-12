@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>PDF Summarizer</title>
+</head>
+<body>
+    <h1>Upload PDF to Summarize</h1>
+    <form action="{% url 'summarize_pdf' %}" method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        <input type="file" name="pdf" accept=".pdf" required>
+        <button type="submit">Summarize</button>
+    </form>
+
+    {% if summaries %}
+        <h2>Summaries</h2>
+        {% for item in summaries %}
+            <div style="margin-bottom: 20px;">
+                <strong>Original:</strong>
+                <p>{{ item.original }}</p>
+                <strong>Summary:</strong>
+                <p>{{ item.summary }}</p>
+            </div>
+        {% endfor %}
+    {% endif %}
+</body>
+</html>
