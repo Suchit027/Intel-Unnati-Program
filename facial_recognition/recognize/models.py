@@ -9,7 +9,11 @@ class Person(models.Model):
     embedding_json = models.TextField(blank=True, null=True)
 
     def set_embedding(self, embedding_tensor):
-        self.embedding_json = json.dumps(embedding_tensor.squeeze(0).tolist())
+        # Ensure embedding_tensor is 1D
+        arr = embedding_tensor
+        if hasattr(arr, 'shape') and len(arr.shape) > 1:
+            arr = arr.squeeze()
+        self.embedding_json = json.dumps(arr.tolist())
 
     def get_embedding(self):
         return np.array(json.loads(self.embedding_json))
