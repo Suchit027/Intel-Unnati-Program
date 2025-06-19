@@ -160,7 +160,7 @@ def api_register_person(request):
 
     try:
         person = Person(name=name, image=image)
-        embedding = extract_embedding(image)
+        embedding = extract_facenet_embedding(image)
         person.set_embedding(embedding)
         person.save()
         return JsonResponse({
@@ -181,7 +181,7 @@ def api_identify_person(request):
     
     try:
         image = request.FILES["image"]
-        emb = extract_embedding(image)
+        emb = extract_facenet_embedding(image)
         persons = Person.objects.all()
         match, score = match_embedding(emb, persons)
         
