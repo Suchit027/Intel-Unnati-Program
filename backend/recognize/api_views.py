@@ -3,8 +3,7 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.core.files.storage import default_storage
 from django.conf import settings
-from transformers import pipeline, SpeechT5Processor, SpeechT5ForTextToSpeech
-from datasets import load_dataset
+from transformers import pipeline
 import soundfile as sf
 import torch
 import pdfplumber
@@ -12,16 +11,12 @@ import mimetypes
 import ffmpeg
 from django.http import JsonResponse
 from .models import Person
-from .face_utils import extract_embedding, match_embedding
+from .face_utils import extract_facenet_embedding, match_embedding
 import gc
 from pathlib import Path
-
-from transformers import (
-    SpeechT5Processor, SpeechT5ForTextToSpeech,
-    pipeline
-)
-
-
+import subprocess
+import torchaudio
+import whisper
 
 @csrf_exempt
 def api_pdf_summarizer(request):
@@ -65,45 +60,41 @@ def api_text_to_speech(request):
 
     import torch
     import soundfile as sf
-    from transformers import (
-        SpeechT5Processor, SpeechT5ForTextToSpeech,
-        SpeechT5HifiGan
-    )
+    from transformers import SpeechT5Processor, SpeechT5ForTextToSpeech, SpeechT5HifiGan
     from datasets import load_dataset
+    import os
+
+    text = request.POST.get('text')
+    if not text:
+        return JsonResponse({'error': 'Text is required'}, status=400)
 
     try:
-        text = request.POST.get('text')
-        if not text:
-            return JsonResponse({'error': 'Text is required'}, status=400)
-
-        # Load all components
+        # Load processor, model, vocoder
         processor = SpeechT5Processor.from_pretrained("microsoft/speecht5_tts")
-        model = SpeechT5ForTextToSpeech.from_pretrained("microsoft/speecht5_tts").to("cuda")
-        vocoder = SpeechT5HifiGan.from_pretrained("microsoft/speecht5_hifigan").to("cuda")
-
+        model = SpeechT5ForTextToSpeech.from_pretrained("microsoft/speecht5_tts").to("cpu")  # or .to(\"cuda\") if GPU available
+        vocoder = SpeechT5HifiGan.from_pretrained("microsoft/speecht5_hifigan").to("cpu")  # or .to(\"cuda\")
         dataset = load_dataset("Matthijs/cmu-arctic-xvectors", split="validation")
-        speaker_embedding = torch.tensor(dataset[7306]["xvector"]).unsqueeze(0).to("cuda")
+        speaker_embedding = torch.tensor(dataset[7306]["xvector"]).unsqueeze(0).to(model.device)
 
-        inputs = processor(text=text, return_tensors="pt").to("cuda")
+        # Preprocess text
+        inputs = processor(text=text, return_tensors="pt").to(model.device)
 
-        # Predict spectrogram
+        # Generate spectrogram
         with torch.no_grad():
             spectrogram = model.generate_speech(inputs["input_ids"], speaker_embedding)
 
-        # Convert spectrogram to waveform using vocoder
+        # Convert spectrogram to audio
         with torch.no_grad():
-            waveform = vocoder(spectrogram)
+            waveform = vocoder(spectrogram).cpu()
 
         audio_path = os.path.join(settings.MEDIA_ROOT, "output.wav")
-        sf.write(audio_path, waveform.squeeze().cpu().numpy(), samplerate=16000)
-
-        # Cleanup
-        del model, processor, vocoder, inputs, spectrogram, waveform
-        torch.cuda.empty_cache()
+        sf.write(audio_path, waveform.squeeze().numpy(), 16000)
 
         return JsonResponse({'audio_url': f"{settings.MEDIA_URL}output.wav"})
 
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return JsonResponse({'error': str(e)}, status=500)
 
 
@@ -114,36 +105,30 @@ def api_speech_to_text(request):
 
     audio_file = request.FILES['audio']
     path = os.path.join(settings.MEDIA_ROOT, audio_file.name)
-    with open(path, 'wb+') as dest:
+
+    with open(path, 'wb+') as f:
         for chunk in audio_file.chunks():
-            dest.write(chunk)
+            f.write(chunk)
 
-    mime_type, _ = mimetypes.guess_type(path)
-    is_video = mime_type and mime_type.startswith('video')
-
-    if is_video:
-        wav_path = f"{path}.wav"
-        ffmpeg.input(path).output(wav_path, ac=1, ar='16000').run(overwrite_output=True)
+    wav_path = f"{path}.wav"
+    try:
+        # Convert to WAV (mono, 16kHz)
+        subprocess.run([
+            "ffmpeg", "-y", "-i", path,
+            "-ac", "1", "-ar", "16000",
+            "-vn", wav_path
+        ], check=True)
         os.remove(path)
-    else:
-        wav_path = path
-
-    asr_pipeline = pipeline(
-        "automatic-speech-recognition",
-        model="openai/whisper-small",
-        device=-1,
-    )
+    except Exception as e:
+        return JsonResponse({'error': f'FFmpeg conversion failed: {e}'}, status=500)
 
     try:
-        result = asr_pipeline(wav_path)
-        transcript = result['text']
+        model = whisper.load_model("small")  # or "small", "medium", "large"
+        result = model.transcribe(wav_path, language="en")
         os.remove(wav_path)
+        return JsonResponse({'transcript': result['text']})
     except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
-
-    del asr_pipeline
-    gc.collect()
-    return JsonResponse({'transcript': transcript})
+        return JsonResponse({'error': f'Whisper failed: {e}'}, status=500)
 
 
 # ---- Face Recognition ----

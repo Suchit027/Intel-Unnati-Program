@@ -2,7 +2,7 @@
 from django.views.decorators.csrf import csrf_exempt
 from django.http import JsonResponse
 from .models import Person
-from .face_utils import extract_embedding, match_embedding
+from .face_utils import extract_facenet_embedding, match_embedding
 
 from django.shortcuts import render
 from django.http import JsonResponse, HttpResponse
@@ -18,7 +18,7 @@ def register_person(request):
         # Save person and image
         from .models import Person
         person = Person(name=name, image=image)
-        embedding  = extract_embedding(image)
+        embedding  = extract_facenet_embedding(image)
         person.set_embedding(embedding)
         person.save()
 
@@ -32,7 +32,7 @@ def register_person(request):
 def identify_person(request):
     if request.method == "POST":
         image = request.FILES["image"]
-        emb = extract_embedding(image)
+        emb = extract_facenet_embedding(image)
         persons = Person.objects.all()
         match, score = match_embedding(emb, persons)
         if match:
