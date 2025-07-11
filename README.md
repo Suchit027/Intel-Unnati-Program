@@ -24,9 +24,6 @@ An end-to-end AI solution developed under the **Intel® Unnati Program**, design
   - Useful for revision and knowledge extraction.
   - Located in `pdf_summarization/`.
 
-- ⚙️ **Optimized with OpenVINO**
-  - All deep learning models are accelerated using OpenVINO Toolkit for real-time inference on edge devices.
-
 ## 🛠️ Tech Stack
 
 | Component     | Technology                  |
